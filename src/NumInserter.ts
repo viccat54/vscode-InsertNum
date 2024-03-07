@@ -28,13 +28,16 @@ export class InsertSettngs implements IInsertSettngs
     
     constructor() 
     {
+
         let subscriptions: vscode.Disposable[] = [];
         vscode.workspace.onDidChangeConfiguration(this.updateSettings, this, subscriptions);
         this._disposable = vscode.Disposable.from(...subscriptions);
-        
+        this.formatStr = "%d";
+        this.start = 0;
+        this.step = 1;
+
         this.updateSettings();
     }
-   
     
     private updateSettings()
     {
@@ -45,22 +48,19 @@ export class InsertSettngs implements IInsertSettngs
         }
         
         //TODO: format check.
-        this.formatStr = settings.get<string>("formatstr");
-        if (!this.formatStr) 
-        {
-            this.formatStr = "%d";
+        let formatStr = settings.get<string>("formatstr");
+        if (!!formatStr) {
+            this.formatStr = formatStr;
         }
         
-        this.start = settings.get<number>("start");
-        if (!this.start)
-         {
-            this.start = 0;
+        let start = settings.get<number>("start");
+        if (!!start) {
+            this.start = start;
         }
         
-        this.step = settings.get<number>("step");
-        if (!this.step)
-         {
-            this.step = 1;
+        let step = settings.get<number>("step");
+        if (!!step) {
+            this.step = step;
         }
         
     }
@@ -78,7 +78,7 @@ export class NumInserter
 {
     
     private _settings : InsertSettngs;
-    
+
     constructor(settings : InsertSettngs)
     {
         this._settings = settings;   
@@ -87,8 +87,10 @@ export class NumInserter
     private insertNumbers(settings : IInsertSettngs)
     {
         let textEditor = vscode.window.activeTextEditor;
+        if (!textEditor) return;
         
-        const selections : vscode.Selection[] = textEditor.selections;
+        let selections : readonly vscode.Selection[] = textEditor.selections;
+        let newSelection : vscode.Selection[] = [];
         
         const formatStr = settings.formatStr;
         const start = settings.start;
@@ -104,18 +106,22 @@ export class NumInserter
                 {
                     let str = TSSprintf.sprintf(formatStr, cur);
                     cur += step;
-                    
+
                     builder.replace(selections[i], str);
+                    
+                    newSelection[i] = new vscode.Selection(selections[i].anchor, new vscode.Position(selections[i].end.line, selections[i].start.character + str.length))
+                    
                 }
             }
         ) 
+
+
+		textEditor.selections = newSelection;
+
     }
     
     private parseUserInput(input : string) : IInsertSettngs
     {
-        if (!input) {
-            return;
-        }
         
         let retSettings : IInsertSettngs = {
             formatStr : "%d",
@@ -123,10 +129,14 @@ export class NumInserter
             step : 1 
         };
         
+        if (!input) {
+            return retSettings;
+        }
+
         //A simple check. :)
         if (!input.includes("%")) {
             vscode.window.showErrorMessage("Wrong format string.");
-            return;
+            return retSettings;
         }
         
         // eg... "%d:1:2"
@@ -165,7 +175,7 @@ export class NumInserter
     {
         //Input default numbers first.
         this.insertNumbers(this._settings);
-        
+
         
         const opt : vscode.InputBoxOptions = {
             placeHolder : "default: %d:0:1",
@@ -183,8 +193,9 @@ export class NumInserter
         
         let newSettings = null;
         
-        input.then(function (val:string) {
-            
+        input.then(function (val:string | undefined) {
+            if (!val) return;
+
             newSettings = parseUserInput(val);
             
             if (!newSettings) {
@@ -196,7 +207,7 @@ export class NumInserter
         
     }
     
-    
+
     public dispose()
     {
         this._settings.dispose();
